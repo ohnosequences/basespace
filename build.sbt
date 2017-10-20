@@ -7,6 +7,8 @@ bucketSuffix  := "era7.com"
 val playVersion  = "1.1.2"
 
 libraryDependencies ++= Seq(
+  "org.scalactic" %% "scalactic" % "3.0.4",
+  "org.scalatest" %% "scalatest" % "3.0.4" % "test",
   // Play
   "com.typesafe.play" %% "play-ahc-ws-standalone"  % playVersion,
   "com.typesafe.play" %% "play-ws-standalone-json" % playVersion
@@ -14,6 +16,7 @@ libraryDependencies ++= Seq(
 
 // For resolving dependencies version conflicts:
 dependencyOverrides ++= Seq(
+  "org.scala-lang.modules" %% "scala-parser-combinators" % "1.0.4",
   // Conflicts from Play and JSON
   "com.typesafe" % "config"    % "1.3.1",
   "joda-time"    % "joda-time" % "2.9.9"
