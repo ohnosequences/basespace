@@ -1,0 +1,3 @@
+# 0.0.2
+
+Downgrade Scala version to 2.11. `webmiodx` project requires it.

@@ -4,6 +4,8 @@ description   := "basespace project"
 
 bucketSuffix  := "era7.com"
 
+scalaVersion  := "2.11.11"
+
 val playVersion  = "1.1.2"
 
 libraryDependencies ++= Seq(
