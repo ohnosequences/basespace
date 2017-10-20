@@ -6,22 +6,16 @@ bucketSuffix  := "era7.com"
 
 scalaVersion  := "2.11.11"
 
-val playVersion  = "1.1.2"
+val playVersion  = "2.5.12"
 
 libraryDependencies ++= Seq(
-  "org.scalactic" %% "scalactic" % "3.0.4",
-  "org.scalatest" %% "scalatest" % "3.0.4" % "test",
-  // Play
-  "com.typesafe.play" %% "play-ahc-ws-standalone"  % playVersion,
-  "com.typesafe.play" %% "play-ws-standalone-json" % playVersion
+  "org.scalatest"     %% "scalatest" % "3.0.4" % "test",
+  "com.typesafe.play" %% "play-ws"   % playVersion,
 )
 
 // For resolving dependencies version conflicts:
 dependencyOverrides ++= Seq(
-  "org.scala-lang.modules" %% "scala-parser-combinators" % "1.0.4",
-  // Conflicts from Play and JSON
-  "com.typesafe" % "config"    % "1.3.1",
-  "joda-time"    % "joda-time" % "2.9.9"
+  "org.scala-lang.modules" %% "scala-xml" % "1.0.5"
 )
 
 // Uncomment if you need to deploy this project as a Statika bundle:

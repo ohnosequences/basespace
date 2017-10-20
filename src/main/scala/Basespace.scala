@@ -1,8 +1,6 @@
 package era7bio.basespace
 
-import play.api.libs.ws.{StandaloneWSClient, StandaloneWSRequest, WSAuthScheme}
-import play.api.libs.ws.DefaultBodyWritables._
-import play.api.libs.ws.JsonBodyReadables._
+import play.api.libs.ws.{WSClient, WSRequest, WSAuthScheme}
 import play.api.libs.json._
 import akka.util.ByteString
 import akka.stream.scaladsl.Sink
@@ -27,7 +25,7 @@ object BaseSpace{
 class BaseSpaceAuth @Inject() (
   val clientID     : String,
   val clientSecret : String,
-  ws               : StandaloneWSClient
+  ws               : WSClient
 ) {
   /**
    * Builds the URL to start the BaseSpace authorization process
@@ -56,12 +54,12 @@ class BaseSpaceAuth @Inject() (
   def authenticate(redirect: String, code: String): Future[JsResult[String]] = {
     val authURL = BaseSpace.baseURLv1 + "/oauthv2/token"
 
-    val authRequest: StandaloneWSRequest = ws.url(authURL)
+    val authRequest: WSRequest = ws.url(authURL)
       .withAuth(
         username = clientID,
         password = clientSecret,
         scheme   = WSAuthScheme.BASIC)
-      .withQueryStringParameters(
+      .withQueryString(
         "code"         -> code,
         "redirect_uri" -> redirect,
         "grant_type"   -> "authorization_code"
@@ -69,7 +67,7 @@ class BaseSpaceAuth @Inject() (
 
     // Return the future of a JSON result field validated as a string
     authRequest.post("").map { response =>
-      (response.body[JsValue] \ "access_token").validate[String]
+      (response.json \ "access_token").validate[String]
     }
   }
 }
@@ -77,7 +75,7 @@ class BaseSpaceAuth @Inject() (
 @Singleton
 class BaseSpaceAPI @Inject() (
   val token        : String,
-  ws               : StandaloneWSClient,
+  ws               : WSClient,
   implicit val mat : Materializer
 ) {
   /**
@@ -89,9 +87,9 @@ class BaseSpaceAPI @Inject() (
    * @param path The URI of the desired resource, as documented in:
    *        https://developer.basespace.illumina.com/docs/content/documentation/rest-api/api-reference
    */
-  def query(baseURL: BaseSpace.BaseURL)(path: String) : StandaloneWSRequest =
+  def query(baseURL: BaseSpace.BaseURL)(path: String) : WSRequest =
     ws.url(baseURL + "/" + path)
-      .withQueryStringParameters(
+      .withQueryString(
         "access_token" -> token
       )
 
@@ -109,7 +107,7 @@ class BaseSpaceAPI @Inject() (
   def projects() : Future[JsResult[JsArray]] = {
     queryV1("users/current/projects").get().map {
       response =>
-        (response.body[JsValue] \ "Response" \ "Items").validate[JsArray]
+        (response.json \ "Response" \ "Items").validate[JsArray]
     }
   }
 
@@ -126,7 +124,7 @@ class BaseSpaceAPI @Inject() (
   def samples(projectId: String) : Future[JsResult[JsArray]] =
     queryV1(s"projects/$projectId/samples").get().map {
       response =>
-        (response.body[JsValue] \ "Response" \ "Items").validate[JsArray]
+        (response.json \ "Response" \ "Items").validate[JsArray]
     }
 
   /**
@@ -142,7 +140,7 @@ class BaseSpaceAPI @Inject() (
   def files(sampleId: String) : Future[JsResult[JsArray]] =
     queryV1(s"samples/$sampleId/files").get().map {
       response =>
-        (response.body[JsValue] \ "Response" \ "Items").validate[JsArray]
+        (response.json \ "Response" \ "Items").validate[JsArray]
     }
 
   /**
@@ -162,7 +160,7 @@ class BaseSpaceAPI @Inject() (
        }
 
        // Materialize and run the stream
-       response.bodyAsSource.runWith(sink).andThen {
+       response.body.runWith(sink).andThen {
          case result =>
          // Close the output stream whether there was an error or not
          outputStream.close()
