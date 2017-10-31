@@ -174,4 +174,26 @@ class BaseSpaceAPI @Inject() (
          }
        }.map(_ => file)
      }
+
+    /**
+     * Returns an array of all the biosamples
+     */
+    def biosamples(): Future[JsResult[JsArray]] =
+      queryV2("biosamples").get().map {
+        response =>
+          (response.json \ "Items").validate[JsArray]
+      }
+
+    /**
+     * Returns all the datasets associated with biosample `biosampleID`.
+     *
+     * @param bioSampleID The ID of the biosample whose datasets are returned.
+     */
+    def biosampleDatasets(biosampleID: String) =
+      queryV2("datasets")
+        .withQueryString("inputbiosamples" -> biosampleID)
+        .get().map {
+          response =>
+            (response.json \ "Items").validate[JsArray]
+        }
 }
