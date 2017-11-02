@@ -2,6 +2,7 @@ package era7bio.basespace
 
 import play.api.libs.ws.{WSClient, WSRequest, WSAuthScheme}
 import play.api.libs.json._
+import play.api.libs.functional.syntax._
 import akka.util.ByteString
 import akka.stream.scaladsl.Sink
 import akka.actor.ActorSystem
@@ -68,6 +69,13 @@ class BaseSpaceAPI (
   val token        : String,
   ws               : WSClient
 ) {
+
+  implicit val basespaceFileReads: Reads[BasespaceFile] = (
+    (JsPath \ "Name"        ).read[String] and
+    (JsPath \ "HrefContent" ).read[String] and
+    (JsPath \ "Id"          ).read[String]
+  )(BasespaceFile.apply _)
+
   /**
    * Wraps WSRequest to make queries to BaseSpace API
    *
@@ -185,6 +193,19 @@ class BaseSpaceAPI (
         response =>
           (response.json \ "Items").validate[JsArray]
         }
+
+    def datasetFiles(datasetID: String): Future[JsError + List[BasespaceFile]] =
+      queryV2(s"datasets/$datasetID/files")
+      .withQueryString("filehrefcontentresolution" -> "true")
+      .get().map {
+        response =>
+        (response.json \ "Items").validate[List[BasespaceFile]] match {
+          case success : JsSuccess[List[BasespaceFile]] =>
+            Right(success.get)
+          case error   : JsError                        =>
+            Left(error)
+        }
+      }
     /**
      * Returns all the datasets associated with biosample `biosampleID`.
      *
