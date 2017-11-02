@@ -4,7 +4,8 @@ import play.api.libs.ws.{WSClient, WSRequest, WSAuthScheme}
 import play.api.libs.json._
 import akka.util.ByteString
 import akka.stream.scaladsl.Sink
-import akka.stream.Materializer
+import akka.actor.ActorSystem
+import akka.stream.ActorMaterializer
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits._
 import scala.util.{ Success, Failure }
@@ -75,8 +76,7 @@ class BaseSpaceAuth @Inject() (
 @Singleton
 class BaseSpaceAPI @Inject() (
   val token        : String,
-  ws               : WSClient,
-  implicit val mat : Materializer
+  ws               : WSClient
 ) {
   /**
    * Wraps WSRequest to make queries to BaseSpace API
@@ -158,6 +158,9 @@ class BaseSpaceAPI @Inject() (
        val sink = Sink.foreach[ByteString] { bytes =>
          outputStream.write(bytes.toArray)
        }
+
+       implicit val system = ActorSystem()
+       implicit val materializer = ActorMaterializer()
 
        // Materialize and run the stream
        response.body.runWith(sink).andThen {
