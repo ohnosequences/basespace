@@ -13,17 +13,7 @@ import javax.inject.{ Singleton, Inject }
 import java.io.File
 import java.nio.file.Files.newOutputStream
 
-/**
- * Encapsulates BaseURL type and its values
- */
-object BaseSpace{
-  type BaseURL = String
-  val baseURLv1: BaseSpace.BaseURL = "https://api.basespace.illumina.com/v1pre3"
-  val baseURLv2: BaseSpace.BaseURL = "https://api.basespace.illumina.com/v2"
-}
-
-@Singleton
-class BaseSpaceAuth @Inject() (
+class BaseSpaceAuth (
   val clientID     : String,
   val clientSecret : String,
   ws               : WSClient
@@ -53,7 +43,7 @@ class BaseSpaceAuth @Inject() (
    *                 [[accessURL]].
    */
   def authenticate(redirect: String, code: String): Future[JsResult[String]] = {
-    val authURL = BaseSpace.baseURLv1 + "/oauthv2/token"
+    val authURL = baseURLv1 + "/oauthv2/token"
 
     val authRequest: WSRequest = ws.url(authURL)
       .withAuth(
@@ -73,8 +63,8 @@ class BaseSpaceAuth @Inject() (
   }
 }
 
-@Singleton
-class BaseSpaceAPI @Inject() (
+
+class BaseSpaceAPI (
   val token        : String,
   ws               : WSClient
 ) {
@@ -87,14 +77,14 @@ class BaseSpaceAPI @Inject() (
    * @param path The URI of the desired resource, as documented in:
    *        https://developer.basespace.illumina.com/docs/content/documentation/rest-api/api-reference
    */
-  def query(baseURL: BaseSpace.BaseURL)(path: String) : WSRequest =
+  def query(baseURL: BaseURL)(path: String) : WSRequest =
     ws.url(baseURL + "/" + path)
       .withQueryString(
         "access_token" -> token
       )
 
-  def queryV1 = query(BaseSpace.baseURLv1)(_)
-  def queryV2 = query(BaseSpace.baseURLv2)(_)
+  def queryV1 = query(baseURLv1)(_)
+  def queryV2 = query(baseURLv2)(_)
 
   /**
    * Returns the list of projects stored in BaseSpace.
