@@ -71,10 +71,25 @@ class BaseSpaceAPI (
 ) {
 
   implicit val basespaceFileReads: Reads[BasespaceFile] = (
+    (JsPath \ "Id"          ).read[ID]     and
     (JsPath \ "Name"        ).read[String] and
-    (JsPath \ "HrefContent" ).read[String] and
-    (JsPath \ "Id"          ).read[String]
+    (JsPath \ "HrefContent" ).read[URL]
   )(BasespaceFile.apply _)
+
+  implicit val biosampleReads: Reads[Biosample] = (
+    (JsPath \ "Id"                    ).read[ID]     and
+    (JsPath \ "Href"                  ).read[URL]    and
+    (JsPath \ "BioSampleName"         ).read[String] and
+    (JsPath \ "DefaultProject" \ "Id" ).read[ID]
+  )(Biosample.apply _)
+
+  implicit val datasetReads: Reads[Dataset] = (
+    (JsPath \ "Id"             ).read[ID]     and
+    (JsPath \ "Name"           ).read[String] and
+    (JsPath \ "DateCreated"    ).read[Date]   and
+    (JsPath \ "Project" \ "Id" ).read[ID]     and
+    (JsPath \ "DatasetType" \ "Name" ).read[String]
+  )(Dataset.apply _)
 
   /**
    * Wraps WSRequest to make queries to BaseSpace API
@@ -102,10 +117,13 @@ class BaseSpaceAPI (
    *   - The "Id" attribute is the identifier of the project
    *   - The "Name" attribute is the title of the project
    */
-  def projects() : Future[JsResult[JsArray]] = {
+  def projects() : Future[JsError + JsArray] = {
     queryV1("users/current/projects").get().map {
       response =>
-        (response.json \ "Response" \ "Items").validate[JsArray]
+        (response.json \ "Response" \ "Items").validate[JsArray] match {
+          case success : JsSuccess[JsArray] => Right(success.get)
+          case error   : JsError            => Left(error)
+        }
     }
   }
 
@@ -119,10 +137,13 @@ class BaseSpaceAPI (
    *
    * @param projectId The ID of the project whose samples will be listed.
    */
-  def samples(projectId: String) : Future[JsResult[JsArray]] =
+  def samples(projectId: String) : Future[JsError + JsArray] =
     queryV1(s"projects/$projectId/samples").get().map {
       response =>
-        (response.json \ "Response" \ "Items").validate[JsArray]
+        (response.json \ "Response" \ "Items").validate[JsArray] match {
+          case success : JsSuccess[JsArray] => Right(success.get)
+          case error   : JsError            => Left(error)
+        }
     }
 
   /**
@@ -135,10 +156,13 @@ class BaseSpaceAPI (
    *
    * @param sampleId The ID of the sample whose files will be listed.
    */
-  def files(sampleId: String) : Future[JsResult[JsArray]] =
+  def files(sampleId: String) : Future[JsError + JsArray] =
     queryV1(s"samples/$sampleId/files").get().map {
       response =>
-        (response.json \ "Response" \ "Items").validate[JsArray]
+        (response.json \ "Response" \ "Items").validate[JsArray] match {
+          case success : JsSuccess[JsArray] => Right(success.get)
+          case error   : JsError            => Left(error)
+        }
     }
 
   /**
@@ -179,33 +203,42 @@ class BaseSpaceAPI (
     /**
      * Returns an array of all the biosamples
      */
-    def biosamples(): Future[JsResult[JsArray]] =
+    def biosamples(): Future[JsError + Seq[Biosample]] =
       queryV2("biosamples").get().map {
         response =>
-          (response.json \ "Items").validate[JsArray]
+          (response.json \ "Items").validate[Seq[Biosample]] match {
+            case success : JsSuccess[Seq[Biosample]] => Right(success.get)
+            case error   : JsError                   => Left(error)
+          }
       }
 
     /**
      * Returns an array of all the datasets
      */
-    def datasets(): Future[JsResult[JsArray]] =
+    def datasets(): Future[JsError + Seq[Dataset]] =
       queryV2("datasets").get().map {
         response =>
-          (response.json \ "Items").validate[JsArray]
+          (response.json \ "Items").validate[Seq[Dataset]] match {
+            case success : JsSuccess[Seq[Dataset]] => Right(success.get)
+            case error   : JsError                 => Left(error)
+          }
         }
 
-    def datasetFiles(datasetID: String): Future[JsError + List[BasespaceFile]] =
+    /**
+     * Returns a list of all the files that belong to the dataset datasetID
+     * @param datasetID The ID of the dataset whose files will be listed
+     */
+    def datasetFiles(datasetID: String): Future[JsError + Seq[BasespaceFile]] =
       queryV2(s"datasets/$datasetID/files")
-      .withQueryString("filehrefcontentresolution" -> "true")
-      .get().map {
-        response =>
-        (response.json \ "Items").validate[List[BasespaceFile]] match {
-          case success : JsSuccess[List[BasespaceFile]] =>
-            Right(success.get)
-          case error   : JsError                        =>
-            Left(error)
-        }
+        .withQueryString("filehrefcontentresolution" -> "true")
+        .get().map {
+          response =>
+          (response.json \ "Items").validate[Seq[BasespaceFile]] match {
+            case success : JsSuccess[Seq[BasespaceFile]] => Right(success.get)
+            case error   : JsError                       => Left(error)
+          }
       }
+
     /**
      * Returns all the datasets associated with biosample `biosampleID`.
      *
