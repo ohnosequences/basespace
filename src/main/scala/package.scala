@@ -1,5 +1,8 @@
 package era7bio
 
+import play.api.libs.json._
+import play.api.libs.functional.syntax._
+
 package object basespace {
 
   type ID =
@@ -19,6 +22,29 @@ package object basespace {
 
   type +[A,B] =
     Either[A,B]
+
+  object DataFormatImplicits {
+    implicit val basespaceFileFormat: Format[BasespaceFile] = (
+      (JsPath \ "Id"          ).format[ID]     and
+      (JsPath \ "Name"        ).format[String] and
+      (JsPath \ "HrefContent" ).format[URL]
+    )(BasespaceFile.apply, unlift(BasespaceFile.unapply))
+
+    implicit val biosampleFormat: Format[Biosample] = (
+      (JsPath \ "Id"                    ).format[ID]     and
+      (JsPath \ "Href"                  ).format[URL]    and
+      (JsPath \ "BioSampleName"         ).format[String] and
+      (JsPath \ "DefaultProject" \ "Id" ).format[ID]
+    )(Biosample.apply, unlift(Biosample.unapply))
+
+    implicit val datasetFormat: Format[Dataset] = (
+      (JsPath \ "Id"               ).format[ID]     and
+      (JsPath \ "Name"             ).format[String] and
+      (JsPath \ "DateCreated"      ).format[Date]   and
+      (JsPath \ "Project" \ "Name" ).format[String] and
+      (JsPath \ "DatasetType" \ "Name" ).format[String]
+    )(Dataset.apply, unlift(Dataset.unapply))
+  }
 }
 
 package basespace {
@@ -40,7 +66,7 @@ package basespace {
     val id          : ID,
     val name        : String,
     val date        : Date,
-    val projectID   : ID,
+    val projectName : String,
     val datasetType : String
   )
 }

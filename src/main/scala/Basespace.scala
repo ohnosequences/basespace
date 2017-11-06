@@ -1,5 +1,6 @@
 package era7bio.basespace
 
+import DataFormatImplicits._
 import play.api.libs.ws.{WSClient, WSRequest, WSAuthScheme}
 import play.api.libs.json._
 import play.api.libs.functional.syntax._
@@ -69,27 +70,6 @@ class BaseSpaceAPI (
   val token        : String,
   ws               : WSClient
 ) {
-
-  implicit val basespaceFileReads: Reads[BasespaceFile] = (
-    (JsPath \ "Id"          ).read[ID]     and
-    (JsPath \ "Name"        ).read[String] and
-    (JsPath \ "HrefContent" ).read[URL]
-  )(BasespaceFile.apply _)
-
-  implicit val biosampleReads: Reads[Biosample] = (
-    (JsPath \ "Id"                    ).read[ID]     and
-    (JsPath \ "Href"                  ).read[URL]    and
-    (JsPath \ "BioSampleName"         ).read[String] and
-    (JsPath \ "DefaultProject" \ "Id" ).read[ID]
-  )(Biosample.apply _)
-
-  implicit val datasetReads: Reads[Dataset] = (
-    (JsPath \ "Id"             ).read[ID]     and
-    (JsPath \ "Name"           ).read[String] and
-    (JsPath \ "DateCreated"    ).read[Date]   and
-    (JsPath \ "Project" \ "Id" ).read[ID]     and
-    (JsPath \ "DatasetType" \ "Name" ).read[String]
-  )(Dataset.apply _)
 
   /**
    * Wraps WSRequest to make queries to BaseSpace API
