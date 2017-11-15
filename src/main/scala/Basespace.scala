@@ -220,6 +220,22 @@ class BaseSpaceAPI (
       }
 
     /**
+     * Returns a list of the files whose extension is .fastq.gz that belong to
+     * the dataset datasetID
+     * @param datasetID The ID of the dataset whose files will be listed
+     */
+    def datasetFASTQFiles(datasetID: String)
+    : Future[JsError + Seq[BasespaceFile]] =
+        datasetFiles(datasetID).map[JsError + Seq[BasespaceFile]] {
+          response =>
+          response.right map { files =>
+            files.filter{ file =>
+              file.name.matches(".*\\.fastq\\.gz$")
+            }
+          }
+      }
+
+    /**
      * Returns all the datasets associated with biosample `biosampleID`.
      *
      * @param bioSampleID The ID of the biosample whose datasets are returned.
