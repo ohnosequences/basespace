@@ -236,6 +236,42 @@ class BaseSpaceAPI (
       }
 
     /**
+     * Transforms a Seq[JsError + Seq[BasespaceFile]] into a
+     * JsError + Seq[BasespaceFile], returning the flattened sequence of
+     * sequences of basespace files if and only if there is no Left(JsError) in
+     * the outer sequence.
+     * @type {[type]}
+     */
+    private
+    val checkSeqFiles
+    : Seq[BasespaceFile] =>
+      Seq[Either[JsError, Seq[BasespaceFile]]] =>
+      Either[JsError, Seq[BasespaceFile]] =
+      goodSeq => seq
+       => {
+        seq match {
+          case Left(err) :: xs =>
+            Left(err)
+          case Right(values) :: xs =>
+            checkSeqFiles(goodSeq ++ values)(xs)
+          case Nil =>
+            Right(goodSeq)
+        }
+      }
+
+    def allFASTQfiles()
+    : Future[JsError + Seq[BasespaceFile]] =
+      datasets() flatMap { datasets =>
+        datasets match {
+          case Left(error) => Future(Left(error))
+          case Right(seq)  =>
+            Future.sequence(
+              seq map { dataset => datasetFASTQFiles(dataset.id) }
+            ) map checkSeqFiles(Seq())
+        }
+      }
+
+    /**
      * Returns all the datasets associated with biosample `biosampleID`.
      *
      * @param bioSampleID The ID of the biosample whose datasets are returned.
