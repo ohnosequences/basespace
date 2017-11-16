@@ -126,6 +126,18 @@ class BaseSpaceAPI (
         }
     }
 
+  def file(fileID: String) : Future[JsError + BasespaceFile] =
+    queryV1(s"files/$fileID")
+      .withQueryString("filehrefcontentresolution" -> "true")
+      .get().map {
+        response =>
+          (response.json \ "Response").validate[BasespaceFile] match {
+            case success : JsSuccess[BasespaceFile] => Right(success.get)
+            case error   : JsError                  => Left(error)
+          }
+      }
+
+
   /**
    * Returns the list of files linked to the sample `sampleId`.
    *
