@@ -148,12 +148,13 @@ class BaseSpaceAPI (
    *
    * @param sampleId The ID of the sample whose files will be listed.
    */
-  def files(sampleId: String) : Future[JsError + JsArray] =
+  def files(sampleId: String) : Future[JsError + Seq[BasespaceFile]] =
     queryV1(s"samples/$sampleId/files").get().map {
       response =>
-        (response.json \ "Response" \ "Items").validate[JsArray] match {
-          case success : JsSuccess[JsArray] => Right(success.get)
-          case error   : JsError            => Left(error)
+        (response.json \ "Response" \ "Items").validate[Seq[BasespaceFile]]
+        match {
+          case success : JsSuccess[Seq[BasespaceFile]] => Right(success.get)
+          case error   : JsError                       => Left(error)
         }
     }
 

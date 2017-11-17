@@ -27,7 +27,9 @@ package object basespace {
     implicit val basespaceFileFormat: Format[BasespaceFile] = (
       (JsPath \ "Id"          ).format[ID]     and
       (JsPath \ "Name"        ).format[String] and
-      (JsPath \ "HrefContent" ).format[URL]
+      (JsPath \ "HrefContent" ).format[URL]    and
+      (JsPath \ "DateCreated" ).format[Date]   and
+      (JsPath \ "Size"        ).format[Long]
     )(BasespaceFile.apply, unlift(BasespaceFile.unapply))
 
     implicit val biosampleFormat: Format[Biosample] = (
@@ -50,9 +52,11 @@ package object basespace {
 package basespace {
 
   case class BasespaceFile(
-    val id   : ID,
-    val name : String,
-    val url  : URL
+    val id          : ID,
+    val name        : String,
+    val url         : URL,
+    val date        : Date,
+    val size        : Long
   )
 
   case class Biosample(
