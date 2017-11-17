@@ -29,7 +29,8 @@ package object basespace {
       (JsPath \ "Name"        ).format[String] and
       (JsPath \ "HrefContent" ).format[URL]    and
       (JsPath \ "DateCreated" ).format[Date]   and
-      (JsPath \ "Size"        ).format[Long]
+      (JsPath \ "Size"        ).format[Long]   and
+      (JsPath \ "DatasetName" ).formatNullable[String]
     )(BasespaceFile.apply, unlift(BasespaceFile.unapply))
 
     implicit val biosampleFormat: Format[Biosample] = (
@@ -56,7 +57,8 @@ package basespace {
     val name        : String,
     val url         : URL,
     val date        : Date,
-    val size        : Long
+    val size        : Long,
+    val datasetName : Option[String]
   )
 
   case class Biosample(

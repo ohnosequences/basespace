@@ -217,6 +217,16 @@ class BaseSpaceAPI (
           }
         }
 
+    def dataset(datasetID: String): Future[JsError + Dataset] =
+      queryV2(s"datasets/$datasetID").get().map {
+        response =>
+          response.json.validate[Dataset] match {
+            case success : JsSuccess[Dataset] => Right(success.get)
+            case error   : JsError            => Left(error)
+          }
+        }
+
+
     /**
      * Returns a list of all the files that belong to the dataset datasetID
      * @param datasetID The ID of the dataset whose files will be listed
@@ -224,11 +234,22 @@ class BaseSpaceAPI (
     def datasetFiles(datasetID: String): Future[JsError + Seq[BasespaceFile]] =
       queryV2(s"datasets/$datasetID/files")
         .withQueryString("filehrefcontentresolution" -> "true")
-        .get().map {
+        .get().flatMap {
           response =>
-          (response.json \ "Items").validate[Seq[BasespaceFile]] match {
-            case success : JsSuccess[Seq[BasespaceFile]] => Right(success.get)
+          ((response.json \ "Items").validate[Seq[BasespaceFile]] match {
             case error   : JsError                       => Left(error)
+            case success : JsSuccess[Seq[BasespaceFile]] => Right {
+              dataset(datasetID) map { datasetResponse =>
+                val name = datasetResponse match {
+                  case Left(_)        => None
+                  case Right(dataset) => Some(dataset.name)
+                }
+                success.get map (_.copy(datasetName = name))
+              }
+            }
+          }) match {
+            case Left(s)  => Future.successful(Left(s))
+            case Right(f) => f.map(Right(_))
           }
       }
 
