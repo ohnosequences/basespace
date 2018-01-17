@@ -208,13 +208,17 @@ class BaseSpaceAPI (
     /**
      * Returns an array of all the datasets
      */
-    def datasets(): Future[JsError + Seq[Dataset]] =
-      queryV2("datasets").get().map {
-        response =>
-          (response.json \ "Items").validate[Seq[Dataset]] match {
-            case success : JsSuccess[Seq[Dataset]] => Right(success.get)
-            case error   : JsError                 => Left(error)
-          }
+    def datasets(maxDatasetsListSize: Int = 10): Future[JsError + Seq[Dataset]] =
+      queryV2("datasets")
+        .withQueryString(
+          "limit" -> maxDatasetsListSize.toString()
+        )
+        .get().map {
+          response =>
+            (response.json \ "Items").validate[Seq[Dataset]] match {
+              case success : JsSuccess[Seq[Dataset]] => Right(success.get)
+              case error   : JsError                 => Left(error)
+            }
         }
 
     def dataset(datasetID: String): Future[JsError + Dataset] =
@@ -293,9 +297,9 @@ class BaseSpaceAPI (
         }
       }
 
-    def allFASTQfiles()
+    def allFASTQfiles(maxDatasetsListSize: Int = 10)
     : Future[JsError + Seq[BasespaceFile]] =
-      datasets() flatMap { datasets =>
+      datasets(maxDatasetsListSize) flatMap { datasets =>
         datasets match {
           case Left(error) => Future(Left(error))
           case Right(seq)  =>
