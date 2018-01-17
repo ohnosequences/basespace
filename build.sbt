@@ -18,6 +18,11 @@ dependencyOverrides ++= Seq(
   "org.scala-lang.modules" %% "scala-xml" % "1.0.5"
 )
 
+assemblyMergeStrategy in assembly := {
+  case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+  case x => MergeStrategy.first
+}
+
 // Uncomment if you need to deploy this project as a Statika bundle:
 // generateStatikaMetadataIn(Compile)
 
