@@ -159,166 +159,131 @@ class BaseSpaceAPI (
     }
 
   /**
-   * Downloads the file with ID `fileId`.
-   *
-   * @param fileId The BaseSpace ID of the file to be downloaded.
-   * @param file The File where the contents of the download will be saved.
-   */
-   def downloadToFile(fileId: String, file: File) : Future[File] =
-     queryV1(s"files/$fileId/content").withMethod("GET").stream() flatMap {
-       response =>
-       val outputStream = newOutputStream(file.toPath)
+    * Returns an array of all the biosamples
+    */
+  def biosamples(): Future[JsError + Seq[Biosample]] =
+    queryV2("biosamples").get().map {
+      response =>
+      (response.json \ "Items").validate[Seq[Biosample]] match {
+        case success : JsSuccess[Seq[Biosample]] => Right(success.get)
+        case error   : JsError                   => Left(error)
+      }
+    }
 
-       // The sink that writes to the output stream
-       val sink = Sink.foreach[ByteString] { bytes =>
-         outputStream.write(bytes.toArray)
-       }
-
-       implicit val system = ActorSystem()
-       implicit val materializer = ActorMaterializer()
-
-       // Materialize and run the stream
-       response.body.runWith(sink).andThen {
-         case result =>
-         // Close the output stream whether there was an error or not
-         outputStream.close()
-         // Get the result or rethrow the error
-         result match {
-           case Success(value) => value
-           case Failure(error) => {
-             // FIXME: Is rethrowing the error the best technique here?
-             error
-           }
-         }
-       }.map(_ => file)
-     }
-
-    /**
-     * Returns an array of all the biosamples
-     */
-    def biosamples(): Future[JsError + Seq[Biosample]] =
-      queryV2("biosamples").get().map {
+  /**
+    * Returns an array of all the datasets
+    */
+  def datasets(maxDatasetsListSize: Int = 10): Future[JsError + Seq[Dataset]] =
+    queryV2("datasets")
+      .withQueryString(
+        "limit" -> maxDatasetsListSize.toString()
+      )
+      .get().map {
         response =>
-          (response.json \ "Items").validate[Seq[Biosample]] match {
-            case success : JsSuccess[Seq[Biosample]] => Right(success.get)
-            case error   : JsError                   => Left(error)
-          }
+        (response.json \ "Items").validate[Seq[Dataset]] match {
+          case success : JsSuccess[Seq[Dataset]] => Right(success.get)
+          case error   : JsError                 => Left(error)
+        }
       }
 
-    /**
-     * Returns an array of all the datasets
-     */
-    def datasets(maxDatasetsListSize: Int = 10): Future[JsError + Seq[Dataset]] =
-      queryV2("datasets")
-        .withQueryString(
-          "limit" -> maxDatasetsListSize.toString()
-        )
-        .get().map {
-          response =>
-            (response.json \ "Items").validate[Seq[Dataset]] match {
-              case success : JsSuccess[Seq[Dataset]] => Right(success.get)
-              case error   : JsError                 => Left(error)
-            }
-        }
+  def dataset(datasetID: String): Future[JsError + Dataset] =
+    queryV2(s"datasets/$datasetID").get().map {
+      response =>
+      response.json.validate[Dataset] match {
+        case success : JsSuccess[Dataset] => Right(success.get)
+        case error   : JsError            => Left(error)
+      }
+    }
 
-    def dataset(datasetID: String): Future[JsError + Dataset] =
-      queryV2(s"datasets/$datasetID").get().map {
+
+  /**
+    * Returns a list of all the files that belong to the dataset datasetID
+    * @param datasetID The ID of the dataset whose files will be listed
+    */
+  def datasetFiles(datasetID: String): Future[JsError + Seq[BasespaceFile]] =
+    queryV2(s"datasets/$datasetID/files")
+      .withQueryString("filehrefcontentresolution" -> "true")
+      .get().flatMap {
         response =>
-          response.json.validate[Dataset] match {
-            case success : JsSuccess[Dataset] => Right(success.get)
-            case error   : JsError            => Left(error)
-          }
-        }
-
-
-    /**
-     * Returns a list of all the files that belong to the dataset datasetID
-     * @param datasetID The ID of the dataset whose files will be listed
-     */
-    def datasetFiles(datasetID: String): Future[JsError + Seq[BasespaceFile]] =
-      queryV2(s"datasets/$datasetID/files")
-        .withQueryString("filehrefcontentresolution" -> "true")
-        .get().flatMap {
-          response =>
-          ((response.json \ "Items").validate[Seq[BasespaceFile]] match {
-            case error   : JsError                       => Left(error)
-            case success : JsSuccess[Seq[BasespaceFile]] => Right {
-              dataset(datasetID) map { datasetResponse =>
-                val name = datasetResponse match {
-                  case Left(_)        => None
-                  case Right(dataset) => Some(dataset.name)
-                }
-                success.get map (_.copy(datasetName = name))
+        ((response.json \ "Items").validate[Seq[BasespaceFile]] match {
+          case error   : JsError                       => Left(error)
+          case success : JsSuccess[Seq[BasespaceFile]] => Right {
+            dataset(datasetID) map { datasetResponse =>
+              val name = datasetResponse match {
+                case Left(_)        => None
+                case Right(dataset) => Some(dataset.name)
               }
-            }
-          }) match {
-            case Left(s)  => Future.successful(Left(s))
-            case Right(f) => f.map(Right(_))
-          }
-      }
-
-    /**
-     * Returns a list of the files whose extension is .fastq.gz that belong to
-     * the dataset datasetID
-     * @param datasetID The ID of the dataset whose files will be listed
-     */
-    def datasetFASTQFiles(datasetID: String)
-    : Future[JsError + Seq[BasespaceFile]] =
-        datasetFiles(datasetID).map[JsError + Seq[BasespaceFile]] {
-          response =>
-          response.right map { files =>
-            files.filter{ file =>
-              file.name.matches(".*\\.fastq\\.gz$")
+              success.get map (_.copy(datasetName = name))
             }
           }
-      }
-
-    /**
-     * Transforms a Seq[JsError + Seq[BasespaceFile]] into a
-     * JsError + Seq[BasespaceFile], returning the flattened sequence of
-     * sequences of basespace files if and only if there is no Left(JsError) in
-     * the outer sequence.
-     * @type {[type]}
-     */
-    private
-    val checkSeqFiles
-    : Seq[BasespaceFile] =>
-      Seq[Either[JsError, Seq[BasespaceFile]]] =>
-      Either[JsError, Seq[BasespaceFile]] =
-      goodSeq => seq
-       => {
-        seq match {
-          case Left(err) :: xs =>
-            Left(err)
-          case Right(values) :: xs =>
-            checkSeqFiles(goodSeq ++ values)(xs)
-          case Nil =>
-            Right(goodSeq)
+        }) match {
+          case Left(s)  => Future.successful(Left(s))
+          case Right(f) => f.map(Right(_))
         }
       }
 
-    def allFASTQfiles(maxDatasetsListSize: Int = 10)
-    : Future[JsError + Seq[BasespaceFile]] =
-      datasets(maxDatasetsListSize) flatMap { datasets =>
-        datasets match {
-          case Left(error) => Future(Left(error))
-          case Right(seq)  =>
-            Future.sequence(
-              seq map { dataset => datasetFASTQFiles(dataset.id) }
-            ) map checkSeqFiles(Seq())
+  /**
+    * Returns a list of the files whose extension is .fastq.gz that belong to
+    * the dataset datasetID
+    * @param datasetID The ID of the dataset whose files will be listed
+    */
+  def datasetFASTQFiles(datasetID: String)
+      : Future[JsError + Seq[BasespaceFile]] =
+    datasetFiles(datasetID).map[JsError + Seq[BasespaceFile]] {
+      response =>
+      response.right map { files =>
+        files.filter{ file =>
+          file.name.matches(".*\\.fastq\\.gz$")
         }
       }
+    }
 
-    /**
-     * Returns all the datasets associated with biosample `biosampleID`.
-     *
-     * @param bioSampleID The ID of the biosample whose datasets are returned.
-     */
-    def biosampleDatasets(biosampleID: String) =
-      queryV2("datasets")
-        .withQueryString("inputbiosamples" -> biosampleID)
-        .get().map {
-          response =>
-            (response.json \ "Items").validate[JsArray]
-        }
+  /**
+    * Transforms a Seq[JsError + Seq[BasespaceFile]] into a
+    * JsError + Seq[BasespaceFile], returning the flattened sequence of
+    * sequences of basespace files if and only if there is no Left(JsError) in
+    * the outer sequence.
+    * @type {[type]}
+    */
+  private
+  val checkSeqFiles
+      : Seq[BasespaceFile] =>
+  Seq[Either[JsError, Seq[BasespaceFile]]] =>
+  Either[JsError, Seq[BasespaceFile]] =
+    goodSeq => seq
+  => {
+    seq match {
+      case Left(err) :: xs =>
+        Left(err)
+      case Right(values) :: xs =>
+        checkSeqFiles(goodSeq ++ values)(xs)
+      case Nil =>
+        Right(goodSeq)
+    }
+  }
+
+  def allFASTQfiles(maxDatasetsListSize: Int = 10)
+      : Future[JsError + Seq[BasespaceFile]] =
+    datasets(maxDatasetsListSize) flatMap { datasets =>
+      datasets match {
+        case Left(error) => Future(Left(error))
+        case Right(seq)  =>
+          Future.sequence(
+            seq map { dataset => datasetFASTQFiles(dataset.id) }
+          ) map checkSeqFiles(Seq())
+      }
+    }
+
+  /**
+    * Returns all the datasets associated with biosample `biosampleID`.
+    *
+    * @param bioSampleID The ID of the biosample whose datasets are returned.
+    */
+  def biosampleDatasets(biosampleID: String) =
+    queryV2("datasets")
+      .withQueryString("inputbiosamples" -> biosampleID)
+      .get().map {
+        response =>
+        (response.json \ "Items").validate[JsArray]
+      }
 }
