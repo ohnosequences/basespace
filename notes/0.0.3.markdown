@@ -1,0 +1,3 @@
+# 0.0.3
+
+Upgrades Scala version to 2.12.6, Play version to 2.6.12 and sbt version to 1.1.0. Also it removes `downloadToFile` method to make it compile. Aim of this release is to be able to use some functionality and data structures in [`16s-web-app-server`](https://github.com/ohnosequences/16s-web-app-server).
