@@ -61,6 +61,11 @@ package basespace {
     val datasetName : Option[String]
   )
 
+  case class PairedFASTQ(
+    val R1 : BasespaceFile,
+    val R2 : BasespaceFile
+  )
+
   case class Biosample(
     val id        : ID,
     val name      : String,

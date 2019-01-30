@@ -90,6 +90,19 @@ class BaseSpaceAPI (
   def queryV2 = query(baseURLv2)(_)
 
   /**
+    * Returns the number of projects available in Basespace
+    */
+  def numProjects: Future[JsError + Int] = {
+    queryV1("users/current/projects")
+      .get.map { response =>
+        (response.json \ "Response" \ "TotalCount").validate[JsArray] match {
+          case success : JsSuccess[JsArray] => Right(success.get.as[Int])
+          case error   : JsError            => Left(error)
+        }
+      }
+  }
+
+  /**
    * Returns the list of projects stored in BaseSpace.
    *
    * The returned value is a JsArray where every object describes a specific
@@ -97,13 +110,56 @@ class BaseSpaceAPI (
    *   - The "Id" attribute is the identifier of the project
    *   - The "Name" attribute is the title of the project
    */
-  def projects() : Future[JsError + JsArray] = {
-    queryV1("users/current/projects").get().map {
-      response =>
-        (response.json \ "Response" \ "Items").validate[JsArray] match {
-          case success : JsSuccess[JsArray] => Right(success.get)
-          case error   : JsError            => Left(error)
+  def projects : Future[JsError + JsArray] = {
+    val limit = 1024
+
+    def retrieveFromOffset(offset: Int): Future[JsError + JsArray] = {
+
+      queryV1("users/current/projects")
+        .withQueryString(
+          "limit" -> limit.toString,
+          "offset" -> offset.toString
+        )
+        .get()
+        .map { response =>
+          (response.json \ "Response" \ "Items").validate[JsArray] match {
+            case success : JsSuccess[JsArray] => Right(success.get)
+            case error   : JsError            => Left(error)
+          }
         }
+    }
+
+    numProjects.flatMap { maybeNum =>
+      maybeNum.fold[Future[JsError + JsArray]]( { error => Future.successful { Left(error) } },
+        { projectCount =>
+          val numPages = projectCount / limit
+
+          val queries = Future.sequence (
+            List.tabulate(numPages) { i =>
+              retrieveFromOffset(i)
+            }
+          )
+
+          queries.map { completed =>
+            val results = completed.toArray
+
+            @annotation.tailrec
+            def concatenateJsArrays(current: Int, until: Int, prev: JsArray): (JsError + JsArray) =
+              if (current < until) {
+                val query = results(current)
+
+                if (query.isRight)
+                  concatenateJsArrays(current + 1, until, query.right.get ++ prev)
+                else
+                  results(current)
+              } else
+                  Right(prev)
+
+
+            concatenateJsArrays(0, numPages, new JsArray)
+          }
+        }
+      )
     }
   }
 
@@ -247,6 +303,37 @@ class BaseSpaceAPI (
       response.right map { files =>
         files.filter{ file =>
           file.name.matches(".*\\.fastq\\.gz$")
+        }
+      }
+    }
+
+  /**
+    * Returns paired fastq files for a dataset in (R1, R2) format. 
+    * If the pair for a R1 file (R2, resp.) does not exist, then we return None
+    * @param datasetID The ID of the dataset whose files will be listed
+    */
+  def datasetPairedFASTQ(datasetID: String)
+      : Future[JsError + Option[PairedFASTQ]] =
+    datasetFiles(datasetID).map[JsError + Option[PairedFASTQ]] { response =>
+
+      val r1suffix = "R1_001.fastq.gz"
+      val r2suffix = "R2_001.fastq.gz"
+
+      response.right map { files =>
+        val fastqs = files.filter{ file =>
+          file.name.matches(".*\\.fastq\\.gz$")
+        }
+
+        val maybeR1 = fastqs.find { file => file.name.endsWith(r1suffix) }
+
+        maybeR1.flatMap { r1 =>
+          val r2name = r1.name.stripSuffix(r1suffix) ++ r2suffix
+
+          val maybeR2 = fastqs.find { file => file.name == r2name }
+
+          maybeR2.map { r2 =>
+            PairedFASTQ(r1, r2)
+          }
         }
       }
     }
