@@ -93,9 +93,9 @@ class BaseSpaceAPI(
     */
   def numProjects: Future[JsError + Int] =
     queryV1("users/current/projects").get.map { response =>
-      (response.json \ "Response" \ "TotalCount").validate[JsArray] match {
-        case success: JsSuccess[JsArray] => Right(success.get.as[Int])
-        case error: JsError              => Left(error)
+      (response.json \ "Response" \ "TotalCount").validate[JsNumber] match {
+        case success: JsSuccess[JsNumber] => Right(success.get.as[Int])
+        case error: JsError               => Left(error)
       }
     }
 
@@ -129,7 +129,7 @@ class BaseSpaceAPI(
         { error =>
           Future.successful { Left(error) }
         }, { projectCount =>
-          val numPages = projectCount / limit
+          val numPages = math.ceil((projectCount * 1.0) / limit).toInt
 
           val queries = Future.sequence(
             List.tabulate(numPages) { i =>
