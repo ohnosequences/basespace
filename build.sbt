@@ -10,7 +10,7 @@ val playVersion  = "2.6.12"
 
 libraryDependencies ++= Seq(
   "org.scalatest"     %% "scalatest" % "3.0.5" % "test",
-  "com.typesafe.play" %% "play-ws"   % playVersion,
+  "com.typesafe.play" %% "play-ws"   % playVersion
 )
 
 // For resolving dependencies version conflicts:
