@@ -186,6 +186,19 @@ class BaseSpaceAPI (
         }
       }
 
+  /** 
+    * List all the datasets for a project
+    */
+  def projectDatasets(projectID: String) : Future[JsError + Seq[Dataset]] =
+    queryV2(s"projects/$projectID/datasets")
+      .get().map {
+        response =>
+        (response.json \ "Items").validate[Seq[Dataset]] match {
+          case success : JsSuccess[Seq[Dataset]] => Right(success.get)
+          case error   : JsError                 => Left(error)
+        }
+      }
+
   def dataset(datasetID: String): Future[JsError + Dataset] =
     queryV2(s"datasets/$datasetID").get().map {
       response =>
