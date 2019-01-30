@@ -14,6 +14,7 @@ import scala.util.{Failure, Success}
 import javax.inject.{Inject, Singleton}
 import java.io.File
 import java.nio.file.Files.newOutputStream
+import scala.collection.GenTraversableOnce
 
 class BaseSpaceAuth(
     val clientID: String,
@@ -75,14 +76,16 @@ class BaseSpaceAPI(
     * the `TotalCount` field from the JSON and a method to extract the items
     * per se.
     */
-  private def paginate(
+  private def paginate[A](
       request: WSRequest,
       getNumItems: JsValue => JsLookupResult,
-      getItems: JsValue => JsLookupResult): Future[JsError + JsArray] = {
+      getItems: JsValue => JsLookupResult,
+      concatenateOp: A => A => A,
+      init: A)(implicit rds: Reads[A]): Future[JsError + A] = {
 
     val limit = 1024
     // Retrieve all data (until limit) from a given offset
-    def retrieveFromOffset(offset: Int): Future[JsError + JsArray] =
+    def retrieveFromOffset(offset: Int): Future[JsError + A] =
       request
         .withQueryString(
           "limit"  -> limit.toString,
@@ -90,9 +93,9 @@ class BaseSpaceAPI(
         )
         .get()
         .map { response =>
-          getItems(response.json).validate[JsArray] match {
-            case success: JsSuccess[JsArray] => Right(success.get)
-            case error: JsError              => Left(error)
+          getItems(response.json).validate[A] match {
+            case success: JsSuccess[A] => Right(success.get)
+            case error: JsError        => Left(error)
           }
         }
 
@@ -108,7 +111,7 @@ class BaseSpaceAPI(
     // requests to retrieve all pages of data in chunks of size {limit}
     // and concatenate them
     numItems.flatMap { maybeNum =>
-      maybeNum.fold[Future[JsError + JsArray]](
+      maybeNum.fold[Future[JsError + A]](
         { error =>
           Future.successful { Left(error) }
         }, { projectCount =>
@@ -124,24 +127,24 @@ class BaseSpaceAPI(
             completed =>
               val results = completed.toArray
 
-              // Aux method to concatenate JsArrays
+              // Aux method to concatenate JsArrays, Seqs, etc
               @annotation.tailrec
-              def concatenateJsArrays(current: Int,
-                                      until: Int,
-                                      prev: JsArray): (JsError + JsArray) =
+              def concatenate(current: Int,
+                              until: Int,
+                              prev: A): (JsError + A) =
                 if (current < until) {
                   val query = results(current)
 
                   if (query.isRight)
-                    concatenateJsArrays(current + 1,
-                                        until,
-                                        query.right.get ++ prev)
+                    concatenate(current + 1,
+                                until,
+                                concatenateOp(query.right.get)(prev))
                   else
                     results(current)
                 } else
                   Right(prev)
 
-              concatenateJsArrays(0, numPages, new JsArray)
+              concatenate(0, numPages, init)
           }
         }
       )
@@ -177,10 +180,13 @@ class BaseSpaceAPI(
   def projects: Future[JsError + JsArray] = {
     val request = queryV1("users/current/projects")
 
-    paginate(
+    paginate[JsArray](
       request,
       { _ \ "Response" \ "TotalCount" },
-      { _ \ "Response" \ "Items" }
+      { _ \ "Response" \ "Items" }, { a => b =>
+        a ++ b
+      },
+      new JsArray
     )
   }
 
@@ -194,13 +200,18 @@ class BaseSpaceAPI(
     *
     * @param projectId The ID of the project whose samples will be listed.
     */
-  def samples(projectId: String): Future[JsError + JsArray] =
-    queryV1(s"projects/$projectId/samples").get().map { response =>
-      (response.json \ "Response" \ "Items").validate[JsArray] match {
-        case success: JsSuccess[JsArray] => Right(success.get)
-        case error: JsError              => Left(error)
-      }
-    }
+  def samples(projectId: String): Future[JsError + JsArray] = {
+    val request = queryV1(s"projects/$projectId/samples")
+
+    paginate[JsArray](
+      request,
+      { _ \ "Response" \ "TotalCount" },
+      { _ \ "Response" \ "Items" }, { a => b =>
+        a ++ b
+      },
+      new JsArray
+    )
+  }
 
   def file(fileID: String): Future[JsError + BasespaceFile] =
     queryV1(s"files/$fileID")
@@ -223,14 +234,18 @@ class BaseSpaceAPI(
     *
     * @param sampleId The ID of the sample whose files will be listed.
     */
-  def files(sampleId: String): Future[JsError + Seq[BasespaceFile]] =
-    queryV1(s"samples/$sampleId/files").get().map { response =>
-      (response.json \ "Response" \ "Items")
-        .validate[Seq[BasespaceFile]] match {
-        case success: JsSuccess[Seq[BasespaceFile]] => Right(success.get)
-        case error: JsError                         => Left(error)
-      }
-    }
+  def files(sampleId: String): Future[JsError + Seq[BasespaceFile]] = {
+    val request = queryV1(s"samples/$sampleId/files")
+
+    paginate[Seq[BasespaceFile]](
+      request,
+      { _ \ "Response" \ "TotalCount" },
+      { _ \ "Response" \ "Items" }, { a => b =>
+        a ++ b
+      },
+      Seq.empty
+    )
+  }
 
   /**
     * Returns an array of all the biosamples
@@ -246,31 +261,35 @@ class BaseSpaceAPI(
   /**
     * Returns an array of all the datasets
     */
-  def datasets(maxDatasetsListSize: Int = 10): Future[JsError + Seq[Dataset]] =
-    queryV2("datasets")
-      .withQueryString(
-        "limit" -> maxDatasetsListSize.toString()
-      )
-      .get()
-      .map { response =>
-        (response.json \ "Items").validate[Seq[Dataset]] match {
-          case success: JsSuccess[Seq[Dataset]] => Right(success.get)
-          case error: JsError                   => Left(error)
-        }
-      }
+  def datasets(
+      maxDatasetsListSize: Int = 10): Future[JsError + Seq[Dataset]] = {
+    val request = queryV2("datasets")
+
+    paginate[Seq[Dataset]](
+      request,
+      { _ \ "Pagging" \ "TotalCount" },
+      { _ \ "Items" }, { a => b =>
+        a ++ b
+      },
+      Seq.empty
+    )
+  }
 
   /**
     * List all the datasets for a project
     */
-  def projectDatasets(projectID: String): Future[JsError + Seq[Dataset]] =
-    queryV2(s"projects/$projectID/datasets")
-      .get()
-      .map { response =>
-        (response.json \ "Items").validate[Seq[Dataset]] match {
-          case success: JsSuccess[Seq[Dataset]] => Right(success.get)
-          case error: JsError                   => Left(error)
-        }
-      }
+  def projectDatasets(projectID: String): Future[JsError + Seq[Dataset]] = {
+    val request = queryV2(s"projects/$projectID/datasets")
+
+    paginate[Seq[Dataset]](
+      request,
+      { _ \ "Pagging" \ "TotalCount" },
+      { _ \ "Items" }, { a => b =>
+        a ++ b
+      },
+      Seq.empty
+    )
+  }
 
   def dataset(datasetID: String): Future[JsError + Dataset] =
     queryV2(s"datasets/$datasetID").get().map { response =>
@@ -355,53 +374,4 @@ class BaseSpaceAPI(
         }
       }
     }
-
-  /**
-    * Transforms a Seq[JsError + Seq[BasespaceFile]] into a
-    * JsError + Seq[BasespaceFile], returning the flattened sequence of
-    * sequences of basespace files if and only if there is no Left(JsError) in
-    * the outer sequence.
-    * @type {[type]}
-    */
-  private val checkSeqFiles: Seq[BasespaceFile] => Seq[
-    Either[JsError, Seq[BasespaceFile]]] => Either[JsError,
-                                                   Seq[BasespaceFile]] =
-    goodSeq =>
-      seq => {
-        seq match {
-          case Left(err) :: xs =>
-            Left(err)
-          case Right(values) :: xs =>
-            checkSeqFiles(goodSeq ++ values)(xs)
-          case Nil =>
-            Right(goodSeq)
-        }
-    }
-
-  def allFASTQfiles(
-      maxDatasetsListSize: Int = 10): Future[JsError + Seq[BasespaceFile]] =
-    datasets(maxDatasetsListSize) flatMap { datasets =>
-      datasets match {
-        case Left(error) => Future(Left(error))
-        case Right(seq) =>
-          Future.sequence(
-            seq map { dataset =>
-              datasetFASTQFiles(dataset.id)
-            }
-          ) map checkSeqFiles(Seq())
-      }
-    }
-
-  /**
-    * Returns all the datasets associated with biosample `biosampleID`.
-    *
-    * @param bioSampleID The ID of the biosample whose datasets are returned.
-    */
-  def biosampleDatasets(biosampleID: String) =
-    queryV2("datasets")
-      .withQueryString("inputbiosamples" -> biosampleID)
-      .get()
-      .map { response =>
-        (response.json \ "Items").validate[JsArray]
-      }
 }
