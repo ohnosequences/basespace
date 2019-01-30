@@ -70,61 +70,44 @@ class BaseSpaceAPI(
     ws: WSClient
 ) {
 
-  /**
-    * Wraps WSRequest to make queries to BaseSpace API
-    *
-    * Fills the authorization header with the access token and prefixes the
-    * query path with the API base URL.
-    *
-    * @param path The URI of the desired resource, as documented in:
-    *        https://developer.basespace.illumina.com/docs/content/documentation/rest-api/api-reference
+  /** Helper to asynchronously retrieve data which involves pagination
+    * (i.e. projects, datasets, samples, etc), passing a method to extract
+    * the `TotalCount` field from the JSON and a method to extract the items
+    * per se.
     */
-  def query(baseURL: BaseURL)(path: String): WSRequest =
-    ws.url(baseURL + "/" + path)
-      .withQueryString(
-        "access_token" -> token
-      )
+  private def paginate(
+      request: WSRequest,
+      getNumItems: JsValue => JsLookupResult,
+      getItems: JsValue => JsLookupResult): Future[JsError + JsArray] = {
 
-  def queryV1 = query(baseURLv1)(_)
-  def queryV2 = query(baseURLv2)(_)
-
-  /**
-    * Returns the number of projects available in Basespace
-    */
-  def numProjects: Future[JsError + Int] =
-    queryV1("users/current/projects").get.map { response =>
-      (response.json \ "Response" \ "TotalCount").validate[JsNumber] match {
-        case success: JsSuccess[JsNumber] => Right(success.get.as[Int])
-        case error: JsError               => Left(error)
-      }
-    }
-
-  /**
-    * Returns the list of projects stored in BaseSpace.
-    *
-    * The returned value is a JsArray where every object describes a specific
-    * project; in particular:
-    *   - The "Id" attribute is the identifier of the project
-    *   - The "Name" attribute is the title of the project
-    */
-  def projects: Future[JsError + JsArray] = {
     val limit = 1024
-
+    // Retrieve all data (until limit) from a given offset
     def retrieveFromOffset(offset: Int): Future[JsError + JsArray] =
-      queryV1("users/current/projects")
+      request
         .withQueryString(
           "limit"  -> limit.toString,
           "offset" -> offset.toString
         )
         .get()
         .map { response =>
-          (response.json \ "Response" \ "Items").validate[JsArray] match {
+          getItems(response.json).validate[JsArray] match {
             case success: JsSuccess[JsArray] => Right(success.get)
             case error: JsError              => Left(error)
           }
         }
 
-    numProjects.flatMap { maybeNum =>
+    def numItems: Future[JsError + Int] =
+      request.get.map { response =>
+        getNumItems(response.json).validate[JsNumber] match {
+          case success: JsSuccess[JsNumber] => Right(success.get.as[Int])
+          case error: JsError               => Left(error)
+        }
+      }
+
+    // If could not retrieve num of items, return JsError, else do async
+    // requests to retrieve all pages of data in chunks of size {limit}
+    // and concatenate them
+    numItems.flatMap { maybeNum =>
       maybeNum.fold[Future[JsError + JsArray]](
         { error =>
           Future.successful { Left(error) }
@@ -141,6 +124,7 @@ class BaseSpaceAPI(
             completed =>
               val results = completed.toArray
 
+              // Aux method to concatenate JsArrays
               @annotation.tailrec
               def concatenateJsArrays(current: Int,
                                       until: Int,
@@ -162,6 +146,42 @@ class BaseSpaceAPI(
         }
       )
     }
+  }
+
+  /**
+    * Wraps WSRequest to make queries to BaseSpace API
+    *
+    * Fills the authorization header with the access token and prefixes the
+    * query path with the API base URL.
+    *
+    * @param path The URI of the desired resource, as documented in:
+    *        https://developer.basespace.illumina.com/docs/content/documentation/rest-api/api-reference
+    */
+  def query(baseURL: BaseURL)(path: String): WSRequest =
+    ws.url(baseURL + "/" + path)
+      .withQueryString(
+        "access_token" -> token
+      )
+
+  def queryV1 = query(baseURLv1)(_)
+  def queryV2 = query(baseURLv2)(_)
+
+  /**
+    * Returns the list of projects stored in BaseSpace.
+    *
+    * The returned value is a JsArray where every object describes a specific
+    * project; in particular:
+    *   - The "Id" attribute is the identifier of the project
+    *   - The "Name" attribute is the title of the project
+    */
+  def projects: Future[JsError + JsArray] = {
+    val request = queryV1("users/current/projects")
+
+    paginate(
+      request,
+      { _ \ "Response" \ "TotalCount" },
+      { _ \ "Response" \ "Items" }
+    )
   }
 
   /**

@@ -1,12 +1,12 @@
-name          := "basespace"
-organization  := "era7bio"
-description   := "basespace project"
+name := "basespace"
+organization := "era7bio"
+description := "basespace project"
 
-bucketSuffix  := "era7.com"
+bucketSuffix := "era7.com"
 
-scalaVersion  := "2.12.6"
+scalaVersion := "2.12.6"
 
-val playVersion  = "2.6.12"
+val playVersion = "2.6.12"
 
 libraryDependencies ++= Seq(
   "org.scalatest"     %% "scalatest" % "3.0.5" % "test",
