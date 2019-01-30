@@ -4,8 +4,6 @@ target/
 boot/
 lib_managed/
 src_managed/
-project/plugins/project/
-project/project/
 
 # Scala-IDE specific
 .scala_dependencies
@@ -14,8 +12,15 @@ project/project/
 data/in/
 data/out/
 
+project/boot/
+project/plugins/project/
+project/project/
+project/target/
+
+# editors
 .tags*
 .sublime*
 .atom*
 .ensime*
 .idea*
+.vscode*
