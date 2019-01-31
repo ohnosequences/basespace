@@ -76,7 +76,7 @@ class BaseSpaceAPI(
     * the `TotalCount` field from the JSON and a method to extract the items
     * per se.
     */
-  private def paginate[A](
+  private def pagination[A](
       request: WSRequest,
       getNumItems: JsValue => JsLookupResult,
       getItems: JsValue => JsLookupResult,
@@ -180,7 +180,7 @@ class BaseSpaceAPI(
   def projects: Future[JsError + JsArray] = {
     val request = queryV1("users/current/projects")
 
-    paginate[JsArray](
+    pagination[JsArray](
       request,
       { _ \ "Response" \ "TotalCount" },
       { _ \ "Response" \ "Items" }, { a => b =>
@@ -203,7 +203,7 @@ class BaseSpaceAPI(
   def samples(projectId: String): Future[JsError + JsArray] = {
     val request = queryV1(s"projects/$projectId/samples")
 
-    paginate[JsArray](
+    pagination[JsArray](
       request,
       { _ \ "Response" \ "TotalCount" },
       { _ \ "Response" \ "Items" }, { a => b =>
@@ -237,7 +237,7 @@ class BaseSpaceAPI(
   def files(sampleId: String): Future[JsError + Seq[BasespaceFile]] = {
     val request = queryV1(s"samples/$sampleId/files")
 
-    paginate[Seq[BasespaceFile]](
+    pagination[Seq[BasespaceFile]](
       request,
       { _ \ "Response" \ "TotalCount" },
       { _ \ "Response" \ "Items" }, { a => b =>
@@ -261,13 +261,12 @@ class BaseSpaceAPI(
   /**
     * Returns an array of all the datasets
     */
-  def datasets(
-      maxDatasetsListSize: Int = 10): Future[JsError + Seq[Dataset]] = {
+  def datasets: Future[JsError + Seq[Dataset]] = {
     val request = queryV2("datasets")
 
-    paginate[Seq[Dataset]](
+    pagination[Seq[Dataset]](
       request,
-      { _ \ "Pagging" \ "TotalCount" },
+      { _ \ "Paging" \ "TotalCount" },
       { _ \ "Items" }, { a => b =>
         a ++ b
       },
@@ -281,9 +280,9 @@ class BaseSpaceAPI(
   def projectDatasets(projectID: String): Future[JsError + Seq[Dataset]] = {
     val request = queryV2(s"projects/$projectID/datasets")
 
-    paginate[Seq[Dataset]](
+    pagination[Seq[Dataset]](
       request,
-      { _ \ "Pagging" \ "TotalCount" },
+      { _ \ "Paging" \ "TotalCount" },
       { _ \ "Items" }, { a => b =>
         a ++ b
       },
@@ -304,27 +303,35 @@ class BaseSpaceAPI(
     * @param datasetID The ID of the dataset whose files will be listed
     */
   def datasetFiles(datasetID: String): Future[JsError + Seq[BasespaceFile]] =
-    queryV2(s"datasets/$datasetID/files")
-      .withQueryString("filehrefcontentresolution" -> "true")
-      .get()
-      .flatMap { response =>
-        ((response.json \ "Items").validate[Seq[BasespaceFile]] match {
-          case error: JsError => Left(error)
-          case success: JsSuccess[Seq[BasespaceFile]] =>
-            Right {
-              dataset(datasetID) map { datasetResponse =>
-                val name = datasetResponse match {
-                  case Left(_)        => None
-                  case Right(dataset) => Some(dataset.name)
-                }
-                success.get map (_.copy(datasetName = name))
+    // Get the dataset name first, to set it in the files retrieved for that dataset,
+    // then get the basespace files associated to that dataset
+    dataset(datasetID).flatMap { datasetResult =>
+      datasetResult.fold[Future[JsError + Seq[BasespaceFile]]](
+        { error =>
+          Future.successful { Left(error) }
+        }, { data =>
+          val datasetName = data.name
+
+          val request = queryV2(s"datasets/$datasetID/files")
+            .withQueryString("filehrefcontentresolution" -> "true")
+
+          pagination[Seq[BasespaceFile]](
+            request,
+            { _ \ "Paging" \ "TotalCount" },
+            { _ \ "Items" }, { a => b =>
+              a ++ b
+            },
+            Seq.empty
+          ).map { basespaceData =>
+            basespaceData.right.map { files =>
+              files.map { file =>
+                file.copy(datasetName = Some(datasetName))
               }
             }
-        }) match {
-          case Left(s)  => Future.successful(Left(s))
-          case Right(f) => f.map(Right(_))
+          }
         }
-      }
+      )
+    }
 
   /**
     * Returns a list of the files whose extension is .fastq.gz that belong to
