@@ -1,0 +1,5 @@
+# 0.1.0
+
+* Upgrades sbt version to 1.1.6
+* Adds missing method `projectDatastes` to retrieve all datasets tied to a project.
+* Adds paging to the queries (i.e. according to the [Basespace API](https://developer.basespace.illumina.com/docs/content/documentation/rest-api/search-api-reference) there is a maximum of 1024 items to be returned in each query, so we add pagination to retrieve all possible pages of at much 1024 elements). Solves [issue #3](https://github.com/ohnosequences/basespace/issues/3).
