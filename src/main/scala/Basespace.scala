@@ -4,17 +4,8 @@ import DataFormatImplicits._
 import play.api.libs.ws.{WSAuthScheme, WSClient, WSRequest}
 import play.api.libs.json._
 import play.api.libs.functional.syntax._
-import akka.util.ByteString
-import akka.stream.scaladsl.Sink
-import akka.actor.ActorSystem
-import akka.stream.ActorMaterializer
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits._
-import scala.util.{Failure, Success}
-import javax.inject.{Inject, Singleton}
-import java.io.File
-import java.nio.file.Files.newOutputStream
-import scala.collection.GenTraversableOnce
 
 class BaseSpaceAuth(
     val clientID: String,
