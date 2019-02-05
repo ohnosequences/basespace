@@ -190,6 +190,14 @@ class BaseSpaceAPI(
     )
   }
 
+  def project(projectID: String): Future[JsError + Project] =
+    queryV2(s"datasets/$projectID").get().map { response =>
+      response.json.validate[Project] match {
+        case success: JsSuccess[Project] => Right(success.get)
+        case error: JsError              => Left(error)
+      }
+    }
+
   /**
     * Returns the list of samples saved in the project `projectId`.
     *

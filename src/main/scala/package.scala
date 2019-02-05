@@ -47,12 +47,19 @@ package object basespace {
         (JsPath \ "Project" \ "Name").format[String] and
         (JsPath \ "DatasetType" \ "Name").format[String]
     )(Dataset.apply, unlift(Dataset.unapply))
+
+    implicit val projectFormat: Format[Project] = (
+      (JsPath \ "Id").format[ID] and
+        (JsPath \ "Name").format[String] and
+        (JsPath \ "Description").format[String] and
+        (JsPath \ "DateCreated").format[Date]
+    )(Project.apply, unlift(Project.unapply))
   }
 }
 
 package basespace {
 
-  case class BasespaceFile(
+  final case class BasespaceFile(
       val id: ID,
       val name: String,
       val url: URL,
@@ -61,23 +68,30 @@ package basespace {
       val datasetName: Option[String]
   )
 
-  case class PairedFASTQ(
+  final case class PairedFASTQ(
       val R1: BasespaceFile,
       val R2: BasespaceFile
   )
 
-  case class Biosample(
+  final case class Biosample(
       val id: ID,
       val name: String,
       val url: URL,
       val projectID: ID
   )
 
-  case class Dataset(
+  final case class Dataset(
       val id: ID,
       val name: String,
       val date: Date,
       val projectName: String,
       val datasetType: String
+  )
+
+  final case class Project(
+      val id: ID,
+      val name: String,
+      val description: String,
+      val date: Date
   )
 }
