@@ -1,0 +1,3 @@
+# 0.2.0
+
+* Adds method to retrieve information about a project.
