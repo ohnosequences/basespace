@@ -161,6 +161,21 @@ class BaseSpaceAPI(
   def queryV2 = query(baseURLv2)(_)
 
   /**
+    * Returns whether the token introduced is valid
+    *
+    * The returned value is a True iff the token has access to Basespace
+    */
+  def isTokenValid: Future[Boolean] = {
+    val request = queryV1("users/current")
+
+    request
+      .get()
+      .map { response =>
+        (response.json \ "Response").isDefined
+      }
+  }
+
+  /**
     * Returns the list of projects stored in BaseSpace.
     *
     * The returned value is a JsArray where every object describes a specific
