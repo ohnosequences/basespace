@@ -45,14 +45,16 @@ package object basespace {
         (JsPath \ "Name").format[String] and
         (JsPath \ "DateCreated").format[Date] and
         (JsPath \ "Project" \ "Name").format[String] and
-        (JsPath \ "DatasetType" \ "Name").format[String]
+        (JsPath \ "DatasetType" \ "Id").format[String] and
+        (JsPath \ "TotalSize").format[Long]
     )(Dataset.apply, unlift(Dataset.unapply))
 
     implicit val projectFormat: Format[Project] = (
       (JsPath \ "Id").format[ID] and
         (JsPath \ "Name").format[String] and
         (JsPath \ "Description").format[String] and
-        (JsPath \ "DateCreated").format[Date]
+        (JsPath \ "DateCreated").format[Date] and
+        (JsPath \ "ImportableDatasets").formatNullable[Long]
     )(Project.apply, unlift(Project.unapply))
   }
 }
@@ -85,13 +87,15 @@ package basespace {
       val name: String,
       val date: Date,
       val projectName: String,
-      val datasetType: String
+      val datasetType: String,
+      val size: Long
   )
 
   final case class Project(
       val id: ID,
       val name: String,
       val description: String,
-      val date: Date
+      val date: Date,
+      val importableDatasets: Option[Long]
   )
 }

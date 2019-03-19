@@ -183,18 +183,54 @@ class BaseSpaceAPI(
     *   - The "Id" attribute is the identifier of the project
     *   - The "Name" attribute is the title of the project
     */
-  def projects: Future[JsError + JsArray] = {
+  def projects: Future[JsError + Seq[Project]] = {
     val request = queryV1("users/current/projects")
 
-    pagination[JsArray](
+    pagination[Seq[Project]](
       request,
       { _ \ "Response" \ "TotalCount" },
       { _ \ "Response" \ "Items" }, { a => b =>
         a ++ b
       },
-      new JsArray
+      Seq.empty
     )
   }
+
+  /**
+    * Returns the list of projects from Basespace which contain importable datasets
+    * (where an importable dataset is the one with type different from common.files)
+    *
+    * @param maxSize for the datasets in each project in bytes
+    */
+  def importableProjects(maxSize: Long): Future[JsError + Seq[Project]] =
+    projects.flatMap { result =>
+      result.fold(
+        error => Future.successful { Left(error) },
+        projects => {
+          Future
+            .sequence(
+              projects.toList.map { project =>
+                val id = project.id
+
+                importableProjectDatasets(id, maxSize).map { result =>
+                  result.fold(
+                    error => (project, 0),
+                    datasets => (project, datasets.length)
+                  )
+                }
+              }
+            )
+            .map { result =>
+              val projects = result.collect {
+                case (project, numImportable) if numImportable > 0 =>
+                  project.copy(importableDatasets = Some(numImportable))
+              }
+
+              Right(projects)
+            }
+        }
+      )
+    }
 
   def project(projectID: String): Future[JsError + Project] =
     queryV2(s"projects/$projectID").get().map { response =>
@@ -289,6 +325,21 @@ class BaseSpaceAPI(
   }
 
   /**
+    * Returns all the datasets which have type different from `common.files`
+    * and whose length is below `maxSize`
+    *
+    * @param maxSize maximum size in bytes for a dataset
+    */
+  def importableDatasets(maxSize: Long): Future[JsError + Seq[Dataset]] =
+    datasets.map {
+      _.right.map { datasets =>
+        datasets.filter { dataset =>
+          dataset.datasetType != "common.files" && dataset.size <= maxSize
+        }
+      }
+    }
+
+  /**
     * List all the datasets for a project
     */
   def projectDatasets(projectID: String): Future[JsError + Seq[Dataset]] = {
@@ -304,6 +355,28 @@ class BaseSpaceAPI(
     )
   }
 
+  /**
+    * List all the datasets for a project which are not of type `common.files` and
+    * whose size is below a certain threshold
+    *
+    * @param projectID the id of the project we want to retrieve the datasets for
+    * @param maxSize the maximum size in bytes for each dataset in the project
+    */
+  def importableProjectDatasets(projectID: String,
+                                maxSize: Long): Future[JsError + Seq[Dataset]] =
+    projectDatasets(projectID).map { result =>
+      result.right.map { datasets =>
+        datasets.filter { dataset =>
+          dataset.datasetType != "common.files" && dataset.size <= maxSize
+        }
+      }
+    }
+
+  /**
+    * Returns the information for a dataset
+    *
+    * @param datasetID the id of the dataset
+    */
   def dataset(datasetID: String): Future[JsError + Dataset] =
     queryV2(s"datasets/$datasetID").get().map { response =>
       response.json.validate[Dataset] match {
